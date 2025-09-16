@@ -1,0 +1,4 @@
+event_id,event_type,location,start_date,end_date,impacted_vendor
+E001,Factory_Shutdown,India,2025-01-15,2025-01-22,Vendor_C
+E002,Vessel_Shortage,China,2025-02-05,2025-02-12,Vendor_B
+E003,Adverse_Weather,US West,2025-03-01,2025-03-04,Vendor_A

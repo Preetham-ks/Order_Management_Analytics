@@ -1,0 +1,22 @@
+
+Order Management Analytics - SOP (1-page)
+
+Purpose:
+Provide guidance to monitor demand vs forecast, PO lifecycle, and supply chain disruptions.
+Scope:
+Applies to Order Management & Supply Solutions analytics for retail operations.
+Steps:
+1. Data Ingestion: Collect daily forecast and actual sales, weekly PO extracts, vendor lead times, and interruption events. Store in centralized DB (Postgres).
+2. Data Validation: Check for missing dates, negative quantities, and mismatched product IDs.
+3. KPI Calculations:
+   - Forecast Accuracy = (1 - ABS(Forecast - Actual)/Forecast) * 100
+   - PO On-Time % = count(case when actual_delivery_date <= expected_delivery_date then 1 end) / total_pos
+   - Fill Rate = sum(received_quantity) / sum(ordered_quantity)
+   - Inventory Coverage Days = inventory_on_hand / avg_daily_demand
+4. Exception Rules:
+   - Flag PO as DELAYED if delay_days > 0
+   - Flag high-risk if vendor impacted by active interruption event
+5. Reporting Cadence:
+   - Daily: Dashboard refresh for Forecast vs Actual and PO statuses
+   - Weekly: Stakeholder summary with top 10 delayed POs and vendors
+6. Escalation: For PO delay > 7 days, notify Supply Manager and Operations Lead.

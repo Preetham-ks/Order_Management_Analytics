@@ -1,0 +1,76 @@
+Power BI / DAX Guide - Order Management Analytics (Walmart Inspired)
+
+Data model:
+- Tables: ForecastVsActual (date, product_id, forecast_demand, actual_demand)
+          PurchaseOrders (po_id, product_id, vendor, order_date, expected_delivery_date, actual_delivery_date, quantity, status, lead_time_days, delay_days)
+          SupplyInterruptions (event_id, event_type, location, start_date, end_date, impacted_vendor)
+          InventorySnapshot (product_id, inventory_on_hand, avg_daily_demand, inventory_coverage_days)
+- Relationships:
+  ForecastVsActual[product_id] -> InventorySnapshot[product_id]
+  PurchaseOrders[product_id] -> ForecastVsActual[product_id]
+  PurchaseOrders[vendor] -> SupplyInterruptions[impacted_vendor] (use as lookup via vendor table ideally)
+
+Key DAX Measures (copy-paste into Power BI Desktop):
+
+1) Forecast Accuracy % (per product or overall)
+Forecast Accuracy % = 
+VAR _forecast = SUM(ForecastVsActual[forecast_demand])
+VAR _actual = SUM(ForecastVsActual[actual_demand])
+RETURN
+IF(_forecast = 0, BLANK(), ROUND(100 * (1 - ABS(_forecast - _actual) / _forecast), 2))
+
+2) PO On-Time %
+PO On-Time % = 
+VAR _total = COUNTROWS(PurchaseOrders)
+VAR _onTime = CALCULATE(COUNTROWS(PurchaseOrders), FILTER(PurchaseOrders, PurchaseOrders[actual_delivery_date] <= PurchaseOrders[expected_delivery_date]))
+RETURN
+IF(_total = 0, BLANK(), ROUND(100 * DIVIDE(_onTime, _total), 2))
+
+3) Delayed PO Count
+Delayed PO Count = CALCULATE(COUNTROWS(PurchaseOrders), FILTER(PurchaseOrders, PurchaseOrders[delay_days] > 0))
+
+4) Average Delay Days (for delayed POs)
+Avg Delay Days = CALCULATE(AVERAGE(PurchaseOrders[delay_days]), FILTER(PurchaseOrders, PurchaseOrders[delay_days] > 0))
+
+5) Fill Rate (assuming received_quantity column; here we approximate using actual delivery = received)
+Fill Rate % = 
+-- If you have Received_Qty and Ordered_Qty, use:
+-- SUM(PurchaseOrders[received_quantity]) / SUM(PurchaseOrders[quantity])
+VAR ordered = SUM(PurchaseOrders[quantity])
+VAR received = SUM(PurchaseOrders[quantity]) - SUM(PurchaseOrders[delay_days]) * 0  -- replace with actual received_qty if available
+RETURN IF(ordered = 0, BLANK(), ROUND(100 * DIVIDE(received, ordered), 2))
+
+6) Inventory Coverage Days (product-level)
+Inventory Coverage Days = AVERAGE(InventorySnapshot[inventory_coverage_days])
+
+7) POs Impacted by Active Interruptions (count)
+POs Impacted by Active Interruptions = 
+CALCULATE(
+  COUNTROWS(PurchaseOrders),
+  FILTER(
+    PurchaseOrders,
+    VAR _vendor = PurchaseOrders[vendor]
+    RETURN
+      COUNTROWS(
+        FILTER(SupplyInterruptions, SupplyInterruptions[impacted_vendor] = _vendor && 
+               PurchaseOrders[expected_delivery_date] >= SupplyInterruptions[start_date] && 
+               PurchaseOrders[expected_delivery_date] <= SupplyInterruptions[end_date])
+      ) > 0
+  )
+)
+
+8) Flag Low Forecast Accuracy (for alerts)
+Flag Low Forecast Accuracy = 
+IF([Forecast Accuracy %] < 80, 1, 0)
+
+9) Weekly PO On-Time % (time-intelligence using order_date)
+Weekly PO On-Time % = 
+VAR WeekTable = VALUES('Date'[WeekStart]) -- assumes Date table with WeekStart
+RETURN
+CALCULATE([PO On-Time %], ALLEXCEPT('Date', 'Date'[WeekStart]))
+
+Tips:
+- Create a Date dimension table and mark as Date table in Power BI.
+- Use conditional formatting in tables to color Status and DelayDays (e.g., red if delay_days > 7).
+- Create a vendor lookup table; use it to join to SupplyInterruptions for easier measures.
+- For automation, configure Power BI alerts on card visuals for measures like Delayed PO Count or Flag Low Forecast Accuracy.

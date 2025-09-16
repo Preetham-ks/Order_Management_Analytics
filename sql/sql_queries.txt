@@ -1,0 +1,33 @@
+
+-- SQL: Key KPI queries (Postgres syntax)
+
+-- 1. Forecast accuracy per product per day
+SELECT date, product_id,
+       forecast_demand,
+       actual_demand,
+       ROUND(100.0 * (1 - ABS(forecast_demand - actual_demand)::numeric / GREATEST(NULLIF(forecast_demand,0),1)),2) as forecast_accuracy_pct
+FROM forecast_vs_actual;
+
+-- 2. PO on-time percentage
+SELECT 
+  COUNT(*) as total_pos,
+  SUM(CASE WHEN actual_delivery_date <= expected_delivery_date THEN 1 ELSE 0 END) as on_time_pos,
+  ROUND(100.0 * SUM(CASE WHEN actual_delivery_date <= expected_delivery_date THEN 1 ELSE 0 END) / COUNT(*),2) as on_time_pct
+FROM purchase_orders;
+
+-- 3. Delayed POs list with vendor and days delayed
+SELECT po_id, product_id, vendor, order_date, expected_delivery_date, actual_delivery_date, delay_days
+FROM purchase_orders
+WHERE delay_days > 0
+ORDER BY delay_days DESC;
+
+-- 4. POs impacted by active interruption events (join by vendor and date overlap)
+SELECT p.po_id, p.vendor, i.event_id, i.event_type, i.start_date, i.end_date
+FROM purchase_orders p
+JOIN supply_interruptions i
+  ON p.vendor = i.impacted_vendor
+ AND p.expected_delivery_date::date BETWEEN i.start_date::date AND i.end_date::date;
+
+-- 5. Inventory coverage
+SELECT product_id, inventory_on_hand, avg_daily_demand, inventory_on_hand::numeric / GREATEST(NULLIF(avg_daily_demand,0),1) as coverage_days
+FROM inventory_snapshot;
